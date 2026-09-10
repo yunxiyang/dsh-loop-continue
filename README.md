@@ -35,3 +35,51 @@ No model call runs unless the turn *both*:
 
 This keeps the extra judge call off ordinary finished turns and only spends it
 where the model plausibly dropped a pending action.
+
+## Stopping early
+
+Steering is not free: each continuation costs a judge round-trip plus one more
+agent step. So the guard also watches whether a steer *worked*.
+
+When it steers, it records how far the session log had grown. The next time the
+same turn stops, it checks whether any assistant step in between actually called
+a tool. If the model only narrated again, the steer was ignored and the turn is
+closed instead of spending the remaining budget on the same refusal. A model
+that answers the steer with a real tool call keeps its normal budget.
+
+## Configuring the guard
+
+The guard resolves its config on every evaluation rather than freezing it at
+mount, so a change reaches the very next turn-stopping check. Two ways to set
+values:
+
+- the harness **Settings UI** (the plugin installs a `loop-continue` section), or
+- the profile's own `cordis.patch.yml`.
+
+Prefer leaving `judgeProvider`/`judgeModel` unset. The guard then derives a
+registered route from the active default model, which always resolves; a
+hand-written route can name a provider the LLM service does not have registered,
+and the judge call then fails.
+
+## Hot mount
+
+`cordis.patch.yml` ships a **plain insert** — only `id` + `name`, no `config`
+and no `!!js` expressions — so a market hot-mount can add or remove this plugin
+as a minimal row. No user-specific endpoint, provider, or key is baked into the
+patch: policy is resolved at runtime as described above.
+
+A patch-layer change is replayed in full on every reload
+(`applyEntryPatches` clones the entry list before applying), so a row adds and
+removes cleanly and never accumulates.
+
+Whether a patch edit takes effect *without a restart* depends on the host:
+
+- Under the CLI (`dsh profile`), `runProfile` installs an HMR service and
+  registers the profile and user patch files with it, so patch edits are applied
+  live.
+- Under **DSH Desktop 2.0.3** that path is not taken — the desktop shell
+  composes the profile itself (`dsh-app-boot` helpers) and never loads
+  `cordis-plugin-hmr`, so a `cordis.patch.yml` edit needs a profile restart.
+
+Edits to `lib/*.js` always need a restart: the dsh HMR service is created with
+`root: []`, so no source directory is watched for module replacement.

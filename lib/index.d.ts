@@ -73,3 +73,6 @@ export declare function parseVerdict(text: string): boolean
 
 /** Register the turn-stopping guard on a Cordis context. */
 export declare function apply(ctx: unknown, config: Config): void
+
+/** Settings namespace carrying this plugin's policy; drives live reconfiguration. */
+export declare const SETTINGS_NAMESPACE: 'loop-continue'

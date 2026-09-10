@@ -1,6 +1,15 @@
 # dsh bundle patch: inserts this plugin into a profile's layer stack.
-# Plain insert only (id + name), so hot-mount can activate it live.
-# Config lives in the profile's own cordis.patch.yml (or Settings UI).
+#
+# This is a PLAIN insert -- only `id` + `name`, no `config`, no `!!js`
+# expressions -- so the market's hot-mount parser can activate it live without
+# a profile restart. `applyEntryPatches` structuredClones the entry list and
+# replays the whole patch stack on every reload, so a minimal row adds and
+# removes cleanly.
+#
+# Policy is NOT frozen here. The guard resolves its config on every evaluation
+# (and accepts a live settings source), so values set in the profile's own
+# cordis.patch.yml or in the harness Settings UI apply to the next turn without
+# a restart.
 - insert:
     - id: loop-continue
       name: 'dsh-loop-continue'

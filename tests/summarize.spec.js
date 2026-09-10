@@ -190,7 +190,7 @@ describe('renderSummary', () => {
  * The hook fires once per completed step, and a steer keeps the turn open so
  * the next step fires it again. `events` grows the way the agent loop logs it.
  */
-function harness({ maxContinuations, verdict = 'true', finishKind = 'stop', warns = [] }) {
+function harness({ maxContinuations, verdict = 'true', finishKind = 'stop', warns = [], settings }) {
   let judgeCalls = 0
   const steers = []
   const llmOptions = []
@@ -215,6 +215,7 @@ function harness({ maxContinuations, verdict = 'true', finishKind = 'stop', warn
     agent,
   })
   ctx.provide('llm', llm)
+  if (settings !== undefined) ctx.provide('settings', settings)
   apply(ctx, { maxContinuations, judgeProvider: null, judgeModel: null, debug: true })
 
   /** Append one step the way the loop logs it, then fire the stopping hook. */
@@ -276,6 +277,27 @@ describe('maxContinuations budget', () => {
 })
 
 describe('judge route resolution', () => {
+  it('applies a settings change without remounting the plugin', async () => {
+    let hooks
+    const settings = {
+      installSection(_ctx, _ns, _schema, _config, sectionHooks) {
+        hooks = sectionHooks
+      },
+    }
+    const h = harness({ maxContinuations: 10, settings })
+
+    await h.stopping(1, [call('exec_command')])
+    await h.stopping(2, [text('Now I will continue.')])
+    expect(h.steers).toHaveLength(1)
+
+    // The Settings UI swaps the live source; the next evaluation must read the
+    // new value instead of the snapshot taken when the plugin mounted.
+    hooks.setSource(() => ({ maxContinuations: 0 }))
+    await h.stopping(3, [call('exec_command')])
+    await h.stopping(4, [text('Now I will continue.')])
+    expect(h.steers).toHaveLength(1)
+  })
+
   it('resolves a registered route instead of passing a literal null provider', async () => {
     const h = harness({ maxContinuations: 1 })
     await h.stopping(1, [call('exec_command')])

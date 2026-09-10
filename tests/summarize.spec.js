@@ -298,7 +298,7 @@ describe('judge route resolution', () => {
     expect(h.steers).toHaveLength(1)
   })
 
-  it('resolves a registered route instead of passing a literal null provider', async () => {
+  it('follows the session route instead of passing a literal null provider', async () => {
     const h = harness({ maxContinuations: 1 })
     await h.stopping(1, [call('exec_command')])
     await h.stopping(2, [text('Now I will continue.')])
@@ -309,15 +309,17 @@ describe('judge route resolution', () => {
     expect(h.llmOptions[0].model).toBe('m')
   })
 
-  it('prefers the active default model over the session header', async () => {
+  it('judges with the model the conversation is running, not the global default', async () => {
     const h = harness({ maxContinuations: 1 })
+    // The default-model setting is irrelevant: the turn is stopping right now,
+    // so the conversation's own route is the one known to work.
     h.ctx.provide('agentDefaultModel', {
       currentSelection: () => ({ provider: 'default-p', model: 'default-m' }),
     })
     await h.stopping(1, [call('exec_command')])
     await h.stopping(2, [text('Now I will continue.')])
-    expect(h.llmOptions[0].provider).toBe('default-p')
-    expect(h.llmOptions[0].model).toBe('default-m')
+    expect(h.llmOptions[0].provider).toBe('p')
+    expect(h.llmOptions[0].model).toBe('m')
   })
 
   it('warns and does not steer when the judge call yields an error finish', async () => {

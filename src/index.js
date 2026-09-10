@@ -348,7 +348,7 @@ export function apply(ctx, config) {
 
     const route = resolved.judgeProvider != null && resolved.judgeModel != null
       ? { provider: resolved.judgeProvider, model: resolved.judgeModel }
-      : routeOf(ctx, agent)
+      : routeOf(agent)
 
     let verdict = false
     try {
@@ -449,30 +449,19 @@ function registerSettings(ctx, config, hooks) {
 /**
  * Resolve the provider/model the judge should call.
  *
- * The session request header can carry a provider id that differs from any
- * registered route (e.g. a pi-ai shorthand), which makes the judge silently
- * fail. Prefer the active default-model selection instead — it always names a
- * registered route — and only fall back to the session header, then give up.
+ * The judge follows the model the current conversation is actually running:
+ * the turn is stopping right now, so that route is by definition working. No
+ * fallback and no derivation — a route that cannot be read is a real fault and
+ * must surface instead of being papered over with a different model.
  *
- * @param ctx - plugin context exposing `agentDefaultModel`.
  * @param agent - the turn's agent subject.
- * @returns a registered provider/model route.
+ * @returns the conversation's own provider/model route.
  */
-function routeOf(ctx, agent) {
-  const selection = (() => {
-    try {
-      return ctx.get('agentDefaultModel')?.currentSelection?.()
-    } catch {
-      return undefined
-    }
-  })()
-  if (typeof selection?.provider === 'string' && selection.provider.length > 0
-    && typeof selection?.model === 'string' && selection.model.length > 0) {
-    return { provider: selection.provider, model: selection.model }
-  }
+function routeOf(agent) {
   const config = agent.session.requestHeader()?.config
   if (config?.provider !== undefined && config?.model !== undefined) {
     return { provider: config.provider, model: config.model }
   }
-  throw new Error(`[${name}] cannot resolve a judge route; set judgeProvider/judgeModel explicitly`)
+  throw new Error(`[${name}] the session has no request header yet; `
+    + 'set judgeProvider/judgeModel explicitly')
 }

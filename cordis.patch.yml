@@ -1,0 +1,6 @@
+# dsh bundle patch: inserts this plugin into a profile's layer stack.
+# Plain insert only (id + name), so hot-mount can activate it live.
+# Config lives in the profile's own cordis.patch.yml (or Settings UI).
+- insert:
+    - id: loop-continue
+      name: 'dsh-loop-continue'

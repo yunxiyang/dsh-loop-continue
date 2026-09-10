@@ -12,6 +12,33 @@ session log, and only asks a judge model one strict `true`/`false` question
 when the shape matches that failure mode. `true` steers the same turn to run one
 more step; `false` (or an unparseable answer) lets the turn close.
 
+## Install
+
+Install into a profile with the dsh CLI. Its `plugin` subcommand forwards to
+pnpm inside the profile directory, so `add`/`remove` behave as usual:
+
+```sh
+dsh plugin --profile <profile> add dsh-loop-continue
+```
+
+Then restart the profile. The profile's `package.json` gains the dependency and
+`dsh.profile.bundles` entry, and the bundled `cordis.patch.yml` inserts the
+guard into the layer stack — no manual patch editing is required.
+
+To remove it:
+
+```sh
+dsh plugin --profile <profile> remove dsh-loop-continue
+```
+
+Working from a local checkout instead? Point the profile at the directory:
+
+```sh
+dsh plugin --profile <profile> add link:/path/to/dsh-loop-continue
+```
+
+Source edits under `lib/` are picked up only on restart.
+
 ## Config
 
 | field            | default | meaning                                        |

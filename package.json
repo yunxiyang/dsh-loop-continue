@@ -13,6 +13,10 @@
   },
   "files": ["lib/index.js", "lib/index.d.ts", "cordis.patch.yml", "README.md"],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yunxiyang/dsh-loop-continue.git"
+  },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1"
   },

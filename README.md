@@ -18,7 +18,7 @@ more step; `false` (or an unparseable answer) lets the turn close.
 |------------------|---------|------------------------------------------------|
 | `maxContinuations` | 10    | hard cap on steering per turn (no infinite loop) |
 | `maxSteps`       | 10      | newest steps shown to the judge                |
-| `maxTailChars`   | 2000    | cap on the trailing assistant text             |
+| `maxTailChars`   | 2000    | trailing-text budget split across the first and last halves |
 | `judgeProvider`  | null    | override provider; null = follow session route |
 | `judgeModel`     | null    | override model; null = follow session route    |
 | `judgeMaxTokens` | 64      | judge output cap                               |

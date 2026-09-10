@@ -33,7 +33,7 @@ const DEFAULT_MAX_CONTINUATIONS = 10
 /** How many most-recent steps of the current turn the summary shows. */
 const DEFAULT_MAX_STEPS = 10
 
-/** Cap on the trailing assistant text handed to the judge. */
+/** Total characters of trailing text handed to the judge, split across the first and last halves. */
 const DEFAULT_MAX_TAIL_CHARS = 2000
 
 export const Config = z.object({
@@ -119,16 +119,40 @@ export function summarizeTurn(events, turn, maxSteps) {
     }
   }
 
-  // The user instruction that opened this turn is the nearest preceding
-  // human message; it anchors the judge's notion of "the task".
+  // The judge needs the task this turn is answering. Walk the preceding
+  // human turns in reverse, skipping bare acknowledgements ("continue",
+  // "ok", ...) that carry no task information, and keep the most recent few
+  // substantive requests in chronological order.
+  const acknowledgements = new Set([
+    '继续', '继续吧', '接着', '继续搞', '好的', '好', '嗯', '知道了',
+    'ok', 'okay', 'go on', 'continue', 'go', 'next',
+  ])
+  const isAcknowledgement = text => acknowledgements.has(text.trim().toLowerCase())
+  const requests = []
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i]
     if (event.type !== 'user/message' || event.data?.turn > turn) continue
-    const source = event.data.source
-    if (source?.kind !== 'user') continue
-    userRequest = (event.data.content ?? [])
-      .filter(b => b.type === 'text').map(b => b.text).join('\n')
-    break
+    if (event.data.source?.kind !== 'user') continue
+    const text = (event.data.content ?? [])
+      .filter(b => b.type === 'text').map(b => b.text).join('\n').trim()
+    if (!text) continue
+    if (isAcknowledgement(text)) continue
+    requests.unshift(text)
+    if (requests.length >= 3) break
+  }
+  // Fall back to the nearest human message when every preceding one is a bare
+  // acknowledgement (or there are none); a weak anchor beats a blank one.
+  if (requests.length === 0) {
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      const event = events[i]
+      if (event.type !== 'user/message' || event.data?.turn > turn) continue
+      if (event.data.source?.kind !== 'user') continue
+      userRequest = (event.data.content ?? [])
+        .filter(b => b.type === 'text').map(b => b.text).join('\n').trim()
+      if (userRequest) break
+    }
+  } else {
+    userRequest = requests.join('\n')
   }
 
   const window = steps.slice(-maxSteps)
@@ -164,8 +188,13 @@ export function renderSummary(summary, maxTailChars) {
     const tools = s.tools.length > 0 ? s.tools.join(', ') : 'no tool call'
     return `  step ${s.step}: ${tools}`
   })
+  // The model states its *next* action near the front ("now I will..."),
+  // then often rambles; the very end usually re-commits. Keep both ends so
+  // the judge sees the promise without eating the whole budget.
   const tail = summary.text.length > maxTailChars
-    ? `${summary.text.slice(-maxTailChars)}`
+    ? `${summary.text.slice(0, Math.floor(maxTailChars / 2))}\n`
+      + '...\n[truncated middle]\n...\n'
+      + `${summary.text.slice(-Math.ceil(maxTailChars / 2))}`
     : summary.text
   const priorNote = summary.truncated
     ? `  (showing only the last ${summary.steps.length} steps)\n`
@@ -210,8 +239,12 @@ async function judge(ctx, route, summary, config, signal) {
     'A turn ends when the agent writes text and calls no tool.',
     'Decide whether that trailing text states an action the agent still',
     'intends to perform, or merely reports completed work.',
-    'A promise of future action ("now I will...", "next I will...") that no',
-    'tool call in the step list performed means the task is unfinished.',
+    'A promise of future action means the task is unfinished when no tool',
+    'call in the step list performed it. This includes explicit "now I will...",',
+    '"next I will..." as well as softer commitments like "let me check/confirm',
+    '/verify ... then ...", "I need to look at ...", "let me first ...", or',
+    'phrases that name a pending read, edit, run, or lookup the agent has not',
+    'yet performed.',
     'A finished report, a question to the human, or a final answer means the',
     'task is finished.',
     'Reply with exactly one word: true or false.',

@@ -76,6 +76,44 @@ describe('summarizeTurn', () => {
     const summary = summarizeTurn(events, 4, 10)
     expect(summary.userRequest).toBe('keep the full width, tell me if it conflicts')
   })
+
+  it('skips bare acknowledgements and reaches the substantive request', () => {
+    const events = [
+      {
+        type: 'user/message',
+        data: {
+          turn: 4,
+          source: { kind: 'user' },
+          content: [text('check why the first output is a full sentence')],
+        },
+      },
+      {
+        type: 'user/message',
+        data: { turn: 5, source: { kind: 'user' }, content: [text('继续')] },
+      },
+      {
+        type: 'user/message',
+        data: { turn: 6, source: { kind: 'user' }, content: [text('继续')] },
+      },
+      ...step(6, 1, [call('exec_command')]),
+      ...step(6, 2, [text('now I will confirm the structure and then change it.')]),
+    ]
+    const summary = summarizeTurn(events, 6, 10)
+    expect(summary.userRequest).toBe('check why the first output is a full sentence')
+  })
+
+  it('falls back to the nearest message when every one is an acknowledgement', () => {
+    const events = [
+      {
+        type: 'user/message',
+        data: { turn: 4, source: { kind: 'user' }, content: [text('继续')] },
+      },
+      ...step(4, 1, [call('exec_command')]),
+      ...step(4, 2, [text('next I will run the test.')]),
+    ]
+    const summary = summarizeTurn(events, 4, 10)
+    expect(summary.userRequest).toBe('继续')
+  })
 })
 
 describe('looksUnfinished', () => {
@@ -132,14 +170,16 @@ describe('renderSummary', () => {
     expect(rendered).toContain('Now I will put the change back.')
   })
 
-  it('truncates a long tail from the front', () => {
+  it('keeps both ends and marks the truncated middle', () => {
     const events = [
       { type: 'turn/start', data: { turn: 1 } },
       ...step(1, 1, [call('exec_command')]),
       ...step(1, 2, [text('x'.repeat(100) + 'TAIL')]),
     ]
     const rendered = renderSummary(summarizeTurn(events, 1, 10), 10)
-    expect(rendered).toContain('x'.repeat(6) + 'TAIL')
+    expect(rendered).toContain('x'.repeat(5))            // head kept
+    expect(rendered).toContain('[truncated middle]')
+    expect(rendered).toContain('xTAIL')                   // tail kept
     expect(rendered).not.toContain('x'.repeat(50))
   })
 })

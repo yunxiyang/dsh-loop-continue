@@ -17,7 +17,7 @@ export interface Config {
   maxContinuations?: number
   /** Newest steps shown to the judge. */
   maxSteps?: number
-  /** Cap on the trailing assistant text handed to the judge. */
+  /** Total trailing-text characters handed to the judge, split across the first and last halves. */
   maxTailChars?: number
   /** Override provider; null = follow the session route. */
   judgeProvider?: string | null

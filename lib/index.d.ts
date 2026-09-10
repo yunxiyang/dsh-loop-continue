@@ -19,9 +19,9 @@ export interface Config {
   maxSteps?: number
   /** Total trailing-text characters handed to the judge, split across the first and last halves. */
   maxTailChars?: number
-  /** Override provider; null = follow the session route. */
+  /** Override provider; null/unset derives from the active default model. */
   judgeProvider?: string | null
-  /** Override model; null = follow the session route. */
+  /** Override model; null/unset derives from the active default model. */
   judgeModel?: string | null
   /** Judge output cap. */
   judgeMaxTokens?: number

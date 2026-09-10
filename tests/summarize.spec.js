@@ -190,15 +190,17 @@ describe('renderSummary', () => {
  * The hook fires once per completed step, and a steer keeps the turn open so
  * the next step fires it again. `events` grows the way the agent loop logs it.
  */
-function harness({ maxContinuations, verdict = 'true' }) {
+function harness({ maxContinuations, verdict = 'true', finishKind = 'stop', warns = [] }) {
   let judgeCalls = 0
   const steers = []
+  const llmOptions = []
   const llm = {
-    stream() {
+    stream(options) {
       judgeCalls += 1
+      llmOptions.push(options)
       return (async function* () {
         yield { type: 'block-end', index: 0, block: { type: 'text', text: verdict } }
-        yield { type: 'finish', reason: { kind: 'stop' } }
+        yield { type: 'finish', reason: { kind: finishKind, failure: finishKind === 'error' ? { message: 'no adapter' } : undefined } }
       })()
     },
   }
@@ -207,9 +209,9 @@ function harness({ maxContinuations, verdict = 'true' }) {
     requestHeader: () => ({ config: { provider: 'p', model: 'm' } }),
   }
   const agent = { session, steer: message => steers.push(message) }
-  const ctx = new Context().extend({ logger: { info() {}, warn() {} }, agent })
+  const ctx = new Context().extend({ logger: { info() {}, warn: msg => warns.push(msg) }, agent })
   ctx.provide('llm', llm)
-  apply(ctx, { maxContinuations, judgeProvider: null, judgeModel: null, debug: false })
+  apply(ctx, { maxContinuations, judgeProvider: null, judgeModel: null, debug: true })
 
   /** Append one step the way the loop logs it, then fire the stopping hook. */
   const stopping = async (index, blocks) => {
@@ -220,7 +222,7 @@ function harness({ maxContinuations, verdict = 'true' }) {
       signal: new AbortController().signal,
     })
   }
-  return { steers, ctx, session, stopping, judgeCalls: () => judgeCalls }
+  return { steers, ctx, session, stopping, judgeCalls: () => judgeCalls, llmOptions, warns }
 }
 
 describe('maxContinuations budget', () => {
@@ -249,5 +251,37 @@ describe('maxContinuations budget', () => {
     h.ctx.emit('session/event', h.session, { type: 'turn/end', data: { turn: 1 } })
     await h.stopping(3, [text('Now I will continue.')])
     expect(h.steers).toHaveLength(2)
+  })
+})
+
+describe('judge route resolution', () => {
+  it('resolves a registered route instead of passing a literal null provider', async () => {
+    const h = harness({ maxContinuations: 1 })
+    await h.stopping(1, [call('exec_command')])
+    await h.stopping(2, [text('Now I will continue.')])
+    // judgeProvider/judgeModel are null in the harness, so the judge must fall
+    // through to the session header rather than call with provider=null.
+    expect(h.llmOptions.length).toBe(1)
+    expect(h.llmOptions[0].provider).toBe('p')
+    expect(h.llmOptions[0].model).toBe('m')
+  })
+
+  it('prefers the active default model over the session header', async () => {
+    const h = harness({ maxContinuations: 1 })
+    h.ctx.provide('agentDefaultModel', {
+      currentSelection: () => ({ provider: 'default-p', model: 'default-m' }),
+    })
+    await h.stopping(1, [call('exec_command')])
+    await h.stopping(2, [text('Now I will continue.')])
+    expect(h.llmOptions[0].provider).toBe('default-p')
+    expect(h.llmOptions[0].model).toBe('default-m')
+  })
+
+  it('warns and does not steer when the judge call yields an error finish', async () => {
+    const h = harness({ maxContinuations: 1, finishKind: 'error' })
+    await h.stopping(1, [call('exec_command')])
+    await h.stopping(2, [text('Now I will continue.')])
+    expect(h.steers).toHaveLength(0)
+    expect(h.warns.some(w => w.includes('judge call failed'))).toBe(true)
   })
 })

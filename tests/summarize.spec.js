@@ -194,6 +194,7 @@ function harness({ maxContinuations, verdict = 'true', finishKind = 'stop', warn
   let judgeCalls = 0
   const steers = []
   const llmOptions = []
+  const infos = []
   const llm = {
     stream(options) {
       judgeCalls += 1
@@ -209,7 +210,10 @@ function harness({ maxContinuations, verdict = 'true', finishKind = 'stop', warn
     requestHeader: () => ({ config: { provider: 'p', model: 'm' } }),
   }
   const agent = { session, steer: message => steers.push(message) }
-  const ctx = new Context().extend({ logger: { info() {}, warn: msg => warns.push(msg) }, agent })
+  const ctx = new Context().extend({
+    logger: { info: msg => infos.push(String(msg)), warn: msg => warns.push(String(msg)) },
+    agent,
+  })
   ctx.provide('llm', llm)
   apply(ctx, { maxContinuations, judgeProvider: null, judgeModel: null, debug: true })
 
@@ -222,15 +226,32 @@ function harness({ maxContinuations, verdict = 'true', finishKind = 'stop', warn
       signal: new AbortController().signal,
     })
   }
-  return { steers, ctx, session, stopping, judgeCalls: () => judgeCalls, llmOptions, warns }
+  return {
+    steers, ctx, session, stopping, judgeCalls: () => judgeCalls, llmOptions, warns, infos,
+  }
 }
 
 describe('maxContinuations budget', () => {
   it('stops steering once the per-turn cap is reached', async () => {
     const h = harness({ maxContinuations: 2 })
     await h.stopping(1, [call('exec_command')])
-    for (let i = 2; i <= 8; i += 1) await h.stopping(i, [text('Now I will continue.')])
+    // Each narration is followed by a step that really calls a tool, so every
+    // steer counts as effective and the per-turn cap is what stops the loop.
+    for (let round = 0; round < 4; round += 1) {
+      await h.stopping(2 + round * 2, [text('Now I will continue.')])
+      await h.stopping(3 + round * 2, [call('exec_command')])
+    }
     expect(h.steers).toHaveLength(2)
+  })
+
+  it('stops after one ignored steer instead of burning the budget', async () => {
+    const h = harness({ maxContinuations: 10 })
+    await h.stopping(1, [call('exec_command')])
+    await h.stopping(2, [text('Now I will continue.')])
+    // The model narrates again instead of calling the tool the steer asked for.
+    for (let i = 3; i <= 6; i += 1) await h.stopping(i, [text('Still narrating.')])
+    expect(h.steers).toHaveLength(1)
+    expect(h.infos.some(line => line.includes('no tool call'))).toBe(true)
   })
 
   it('spends nothing when the judge answers false', async () => {

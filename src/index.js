@@ -315,6 +315,14 @@ export function apply(ctx, config) {
    */
   const spent = new Map()
 
+  /**
+   * Turns waiting to see whether their last steer changed anything. A steer
+   * that the model ignores costs a full judge round-trip and produces another
+   * narration, so one ignored steer ends the turn instead of burning the whole
+   * budget. Cleared as soon as the probe is read, or when the turn closes.
+   */
+  const pendingProbe = new Map()
+
   ctx.on('agent/turn-stopping', async ({ agent, turn, signal }) => {
     const used = spent.get(turn) ?? 0
     if (used >= resolved.maxContinuations) {
@@ -324,8 +332,29 @@ export function apply(ctx, config) {
       return
     }
 
-    const summary = summarizeTurn(readEvents(agent.session), turn, resolved.maxSteps)
+    const events = readEvents(agent.session)
+    const summary = summarizeTurn(events, turn, resolved.maxSteps)
     if (!looksUnfinished(summary)) return
+
+    // Did the previous steer actually make the model call a tool? A turn that
+    // narrates again after being told to emit the call will keep doing so, so
+    // stop here rather than spend the remaining budget on the same refusal.
+    const probe = pendingProbe.get(turn)
+    if (probe !== undefined) {
+      pendingProbe.delete(turn)
+      const calledTool = events.slice(probe.eventsAtSteer).some(event => {
+        if (event.type !== 'assistant/message' || event.data?.turn !== turn) return false
+        return (event.data.message?.content ?? []).some(b => b.type === 'tool-call')
+      })
+      if (!calledTool) {
+        spent.set(turn, resolved.maxContinuations)
+        if (resolved.debug) {
+          ctx.logger?.info?.(`[${name}] turn ${turn}: previous steer produced no tool call; `
+            + 'stopping instead of steering again')
+        }
+        return
+      }
+    }
 
     const route = resolved.judgeProvider != null && resolved.judgeModel != null
       ? { provider: resolved.judgeProvider, model: resolved.judgeModel }
@@ -350,6 +379,7 @@ export function apply(ctx, config) {
     }
 
     spent.set(turn, used + 1)
+    pendingProbe.set(turn, { eventsAtSteer: events.length })
     agent.steer(createUserMessage({
       content: [{ type: 'text', text: resolved.steerText }],
       source: PLUGIN_SOURCE,
@@ -358,7 +388,10 @@ export function apply(ctx, config) {
 
   /** Drop bookkeeping once a turn truly closes. */
   ctx.on('session/event', (_session, event) => {
-    if (event.type === 'turn/end') spent.delete(event.data.turn)
+    if (event.type === 'turn/end') {
+      spent.delete(event.data.turn)
+      pendingProbe.delete(event.data.turn)
+    }
   })
 }
 

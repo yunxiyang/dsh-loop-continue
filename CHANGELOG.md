@@ -14,6 +14,12 @@
   factory, so the package still ships no build step and no client dependencies
   of its own — `react` arrives through the injected `require` table.
 
+- The card starts collapsed and opens from its header, restating the built-in
+  plugin cards' tokens, radii, and paddings so it reads as one of them. The
+  chevron is inlined rather than imported: the primitives package that ships it
+  belongs to the web app's own bundle and is not a module a third-party client
+  bundle may require.
+
 ### Changed
 
 - Prompt textareas commit on blur. The Host validates and persists the whole

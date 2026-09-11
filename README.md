@@ -92,7 +92,8 @@ working route; set them only to judge with a different model on purpose.
 
 Both prompt texts ship as defaults and are plain config fields, so you can
 retune the guard without touching code. The package ships a browser half, so
-the editor is a card under **Settings > Plugins > plugin config**:
+the editor is a card under **Settings > Plugins > plugin config**. It starts
+collapsed like every other plugin card; click the header to open it:
 
 ```
 Loop Continue - resume an unfinished turn

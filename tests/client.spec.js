@@ -129,7 +129,7 @@ async function mount(initial = STORED) {
   let current = read()
   react.__onRerender(() => { current = read() })
 
-  return {
+  const ui = {
     calls,
     stored,
     els: () => current,
@@ -137,10 +137,80 @@ async function mount(initial = STORED) {
     numeric: (label) => current.find((e) => e.type === 'input' && e.props['aria-label'] === label),
     toggle: () => current.find((e) => e.type === 'input' && e.props.type === 'checkbox'),
     button: (label) => current.filter((e) => e.type === 'button').find((b) => b.children.join('') === label),
+    header: () => current.find((e) => e.type === 'button' && e.props.className === 'dshLoopHeader'),
+    /** Open the card; the controls only exist once it is expanded. */
+    expand() {
+      const header = ui.header()
+      if (header.props['aria-expanded'] !== true) header.props.onClick()
+    },
   }
+  ui.expand()
+  return ui
 }
 
 describe('settings card', () => {
+  it('starts collapsed and expands on the header', async () => {
+    const bundle = await loadBundle()
+    const react = createReact()
+    const mod = bundle.factory((name) => (name === 'react' ? react : null))
+    const { scope } = createScope(STORED)
+    let card = null
+    mod.apply({
+      effect: () => {},
+      inject: (_deps, fn) => fn({
+        settingsScope: { bind: () => scope },
+        slots: { inject: (_n, inner) => inner(), register: (_o, factory) => { card = factory } },
+      }),
+    })
+
+    const read = () => {
+      const out = []
+      let i = 0
+      const visit = (node) => {
+        if (node === null || node === undefined) return
+        if (typeof node === 'string' || typeof node === 'number') return
+        if (Array.isArray(node)) { for (const c of node) visit(c); return }
+        if (typeof node.type === 'function') {
+          react.__begin(`${node.type.name}:${i++}`)
+          visit(node.type(node.props))
+          return
+        }
+        out.push(node)
+        for (const c of (node.children ?? [])) visit(c)
+      }
+      react.__begin('card:0')
+      const desc = card()
+      visit(desc.type(desc.props))
+      return out
+    }
+
+    let current = read()
+    react.__onRerender(() => { current = read() })
+
+    const header = () => current.find((e) => e.type === 'button' && e.props.className === 'dshLoopHeader')
+
+    expect(header().props['aria-expanded'], 'collapsed by default').toBe(false)
+    expect(current.filter((e) => e.type === 'textarea'), 'no controls while collapsed').toHaveLength(0)
+
+    header().props.onClick()
+    expect(header().props['aria-expanded']).toBe(true)
+    expect(current.filter((e) => e.type === 'textarea'), 'controls appear when open').toHaveLength(2)
+    expect(current.find((e) => e.type === 'li').props.className).toContain('dshLoopCardOpen')
+
+    header().props.onClick()
+    expect(header().props['aria-expanded']).toBe(false)
+    expect(current.filter((e) => e.type === 'textarea')).toHaveLength(0)
+  })
+
+  it('shows the unsaved marker on the header while collapsed', async () => {
+    const ui = await mount()
+    ui.textarea(0).props.onChange({ target: { value: 'DRAFT' } })
+    ui.header().props.onClick()
+    const pending = ui.els().find((e) => e.props?.className === 'dshLoopPending')
+    expect(pending, 'a collapsed card must still announce the pending edit').toBeDefined()
+    expect(pending.children.join('')).toBe('未保存')
+  })
+
   it('exposes both prompts and the numeric fields', async () => {
     const ui = await mount()
     expect(ui.els().filter((e) => e.type === 'textarea')).toHaveLength(2)

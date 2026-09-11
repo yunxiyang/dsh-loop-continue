@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.3
+
+### Fixed
+
+- **The plugin failed to load on any host with a settings service.** The
+  settings section was registered with only a `setSource` hook, but
+  `installSection` calls `hooks.onChange()` unconditionally and `scope.watch()`
+  calls it again. The resulting `TypeError: hooks.onChange is not a function`
+  was thrown from inside the plugin fiber, so `apply` aborted and the guard
+  never registered at all — no steering, no log line beyond the stack trace.
+  0.1.1 and 0.1.2 are affected; upgrade.
+
+- **A settings-section failure no longer fails the plugin.** The install call is
+  wrapped, so a cosmetic registration problem cannot take down the guard.
+
 ## 0.1.2
 
 ### Added

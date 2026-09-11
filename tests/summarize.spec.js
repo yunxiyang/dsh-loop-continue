@@ -314,6 +314,10 @@ describe('judge route resolution', () => {
     let hooks
     const settings = {
       installSection(_ctx, _ns, _schema, _config, sectionHooks) {
+        // Mirror dsh-settings: it calls these unconditionally, so a call site
+        // that omits one must fail here the way it fails in the host.
+        if (typeof sectionHooks.setSource !== 'function') throw new TypeError('hooks.setSource is not a function')
+        if (typeof sectionHooks.onChange !== 'function') throw new TypeError('hooks.onChange is not a function')
         hooks = sectionHooks
       },
     }

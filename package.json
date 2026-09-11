@@ -1,6 +1,6 @@
 {
   "name": "dsh-loop-continue",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Continue a DeepSeek Harness agent turn when the model narrated but did not call a tool.",
   "type": "module",
   "main": "lib/index.js",

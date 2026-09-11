@@ -138,6 +138,8 @@ async function mount(initial = STORED) {
     toggle: () => current.find((e) => e.type === 'input' && e.props.type === 'checkbox'),
     button: (label) => current.filter((e) => e.type === 'button').find((b) => b.children.join('') === label),
     header: () => current.find((e) => e.type === 'button' && e.props.className === 'dshLoopHeader'),
+    headerTitle: () => current.find((e) => e.props?.className === 'dshLoopTitle'),
+    headerDescription: () => current.find((e) => e.props?.className === 'dshLoopDescription').children.join(''),
     /** Open the card; the controls only exist once it is expanded. */
     expand() {
       const header = ui.header()
@@ -213,6 +215,8 @@ describe('settings card', () => {
 
   it('exposes both prompts and the numeric fields', async () => {
     const ui = await mount()
+    expect(ui.headerTitle().children.join('')).toBe('Loop Continue')
+    expect(ui.headerDescription()).toContain('在 LLM 无工具调用时进行一次判定')
     expect(ui.els().filter((e) => e.type === 'textarea')).toHaveLength(2)
     expect(ui.textarea(0).props.value).toBe('STORED-PROMPT')
     expect(ui.textarea(1).props.value).toBe('STORED-STEER')

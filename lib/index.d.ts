@@ -11,6 +11,30 @@ export declare const name: 'loop-continue'
 /** The services this plugin reads from its Cordis context. */
 export declare const inject: ['llm']
 
+/** Settings namespace the Host serves and the browser card claims. */
+export declare const SETTINGS_NAMESPACE: 'loop-continue'
+
+/** Default per-turn steering cap. */
+export declare const DEFAULT_MAX_CONTINUATIONS: 10
+
+/** Default number of trailing steps shown to the judge. */
+export declare const DEFAULT_MAX_STEPS: 10
+
+/** Default trailing-text character budget for the judge. */
+export declare const DEFAULT_MAX_TAIL_CHARS: 2000
+
+/** Default judge output ceiling. */
+export declare const DEFAULT_JUDGE_MAX_TOKENS: 64
+
+/** Default judge sampling temperature. */
+export declare const DEFAULT_JUDGE_TEMPERATURE: 0
+
+/** Built-in judge instruction, shipped as the `judgePrompt` default. */
+export declare const DEFAULT_JUDGE_PROMPT: string
+
+/** Built-in steering message, shipped as the `steerText` default. */
+export declare const DEFAULT_STEER_TEXT: string
+
 /** Resolved plugin policy; every field has a default, so all are optional. */
 export interface Config {
   /** Hard cap on steering per turn (no infinite loop). */
@@ -75,12 +99,3 @@ export declare function parseVerdict(text: string): boolean
 
 /** Register the turn-stopping guard on a Cordis context. */
 export declare function apply(ctx: unknown, config: Config): void
-
-/** Settings namespace carrying this plugin's policy; drives live reconfiguration. */
-export declare const SETTINGS_NAMESPACE: 'loop-continue'
-
-/** Built-in judge instruction, shipped as the `judgePrompt` default. */
-export declare const DEFAULT_JUDGE_PROMPT: string
-
-/** Built-in message injected when the guard steers an unfinished turn. */
-export declare const DEFAULT_STEER_TEXT: string

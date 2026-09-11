@@ -28,13 +28,19 @@ export const inject = ['llm']
 const PLUGIN_SOURCE = { kind: 'plugin', plugin: name }
 
 /** How many extra steps one turn may buy, across all of its stopping boundaries. */
-const DEFAULT_MAX_CONTINUATIONS = 10
+export const DEFAULT_MAX_CONTINUATIONS = 10
 
 /** How many most-recent steps of the current turn the summary shows. */
-const DEFAULT_MAX_STEPS = 10
+export const DEFAULT_MAX_STEPS = 10
 
 /** Total characters of trailing text handed to the judge, split across the first and last halves. */
-const DEFAULT_MAX_TAIL_CHARS = 2000
+export const DEFAULT_MAX_TAIL_CHARS = 2000
+
+/** Judge output ceiling; the answer is one word. */
+export const DEFAULT_JUDGE_MAX_TOKENS = 64
+
+/** Judge sampling temperature; a verdict should not vary run to run. */
+export const DEFAULT_JUDGE_TEMPERATURE = 0
 
 /**
  * Built-in judge instruction. The judge sees a deterministic turn summary and
@@ -69,8 +75,8 @@ export const Config = z.object({
   maxTailChars: z.number().step(1).min(1).default(DEFAULT_MAX_TAIL_CHARS),
   judgeProvider: z.union([z.string(), z.const(null)]),
   judgeModel: z.union([z.string(), z.const(null)]),
-  judgeMaxTokens: z.number().step(1).min(1).default(64),
-  judgeTemperature: z.number().default(0),
+  judgeMaxTokens: z.number().step(1).min(1).default(DEFAULT_JUDGE_MAX_TOKENS),
+  judgeTemperature: z.number().default(DEFAULT_JUDGE_TEMPERATURE),
   /** Instruction telling the judge what counts as an unfinished turn. */
   judgePrompt: z.string().default(DEFAULT_JUDGE_PROMPT),
   /** Steer text sent back to the model; the model then runs one more step. */
@@ -414,8 +420,8 @@ function resolveConfig(config) {
     maxContinuations: config.maxContinuations ?? DEFAULT_MAX_CONTINUATIONS,
     maxSteps: config.maxSteps ?? DEFAULT_MAX_STEPS,
     maxTailChars: config.maxTailChars ?? DEFAULT_MAX_TAIL_CHARS,
-    judgeMaxTokens: config.judgeMaxTokens ?? 64,
-    judgeTemperature: config.judgeTemperature ?? 0,
+    judgeMaxTokens: config.judgeMaxTokens ?? DEFAULT_JUDGE_MAX_TOKENS,
+    judgeTemperature: config.judgeTemperature ?? DEFAULT_JUDGE_TEMPERATURE,
     judgePrompt: config.judgePrompt ?? DEFAULT_JUDGE_PROMPT,
     steerText: config.steerText ?? DEFAULT_STEER_TEXT,
     debug: config.debug ?? false,

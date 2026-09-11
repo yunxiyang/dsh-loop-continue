@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.0
+
+### Added
+
+- **A settings card under Settings > Plugins > plugin config.** The package now
+  ships a browser half (`lib/client.js`, discovered through
+  `dsh.client.platform: "web"` plus the `./client` export), so the judge policy
+  and the steering message are editable in the GUI instead of only in
+  `~/.dsh/settings.yaml`. Both surfaces write the same namespace.
+
+- The hand-written bundle is a plain `window.__ModuleLoader__.load` closure
+  factory, so the package still ships no build step and no client dependencies
+  of its own — `react` arrives through the injected `require` table.
+
+### Changed
+
+- Prompt textareas commit on blur. The Host validates and persists the whole
+  settings document per write, so committing a 740-character policy on every
+  keystroke would issue one write per character. Numbers and the toggle still
+  commit immediately.
+
+- Every default is exported (`DEFAULT_MAX_CONTINUATIONS`, `DEFAULT_MAX_STEPS`,
+  `DEFAULT_MAX_TAIL_CHARS`, `DEFAULT_JUDGE_MAX_TOKENS`,
+  `DEFAULT_JUDGE_TEMPERATURE`) and used as the single source for both the schema
+  and the fallback paths.
+
 ## 0.1.3
 
 ### Fixed

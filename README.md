@@ -41,18 +41,18 @@ Source edits under `lib/` are picked up only on restart.
 
 ## Config
 
-| field            | default | meaning                                        |
-|------------------|---------|------------------------------------------------|
-| `maxContinuations` | 10    | hard cap on steering per turn (no infinite loop) |
-| `maxSteps`       | 10      | newest steps shown to the judge                |
-| `maxTailChars`   | 2000    | trailing-text budget split across the first and last halves |
-| `judgeProvider`  | null    | override provider; null/unset = derive from the active default model |
-| `judgeModel`     | null    | override model; null/unset = derive from the active default model    |
-| `judgeMaxTokens` | 64      | judge output cap                               |
-| `judgeTemperature` | 0     | judge sampling temperature                     |
-| `judgePrompt`    | built-in | instruction telling the judge what counts as unfinished |
-| `steerText`      | built-in | message injected when the guard steers        |
-| `debug`          | false   | log every evaluation                          |
+| field            | default | in card | meaning                                        |
+|------------------|---------|---------|------------------------------------------------|
+| `maxContinuations` | 10    | yes     | hard cap on steering per turn (no infinite loop) |
+| `maxSteps`       | 10      | yes     | newest steps shown to the judge                |
+| `maxTailChars`   | 2000    | yes     | trailing-text budget split across the first and last halves |
+| `judgePrompt`    | built-in | yes    | instruction telling the judge what counts as unfinished |
+| `steerText`      | built-in | yes    | message injected when the guard steers        |
+| `debug`          | false   | yes     | log every evaluation (needs a restart)         |
+| `judgeProvider`  | null    | no      | override provider; null/unset = derive from the session route |
+| `judgeModel`     | null    | no      | override model; null/unset = derive from the session route    |
+| `judgeMaxTokens` | 64      | no      | judge output cap                               |
+| `judgeTemperature` | 0     | no      | judge sampling temperature                     |
 
 ## Deterministic gates
 
@@ -91,8 +91,28 @@ working route; set them only to judge with a different model on purpose.
 ## Editing the prompts
 
 Both prompt texts ship as defaults and are plain config fields, so you can
-retune the guard without touching code. The editing surface is
-`~/.dsh/settings.yaml`:
+retune the guard without touching code. The package ships a browser half, so
+the editor is a card under **Settings > Plugins > plugin config**:
+
+```
+Loop Continue - resume an unfinished turn
+  judgePrompt - decision policy   [textarea]
+  steerText - resume message      [textarea]
+  max steering per turn           [3]     0..100
+  steps in the summary            [10]    1..100
+  trailing-text budget (chars)    [2000]  100..20000
+  debug - log every verdict       [ ]
+```
+
+The prompts save **on blur**, not per keystroke: the Host validates and
+persists the whole document on every write, and one write per keystroke of a
+740-character policy paragraph is wasteful. The numeric fields and the toggle
+save immediately. Every change except `debug` applies to the next
+turn-stopping check with **no restart**; `debug` is read when the plugin is
+loaded, so it needs one.
+
+The same fields are editable in `~/.dsh/settings.yaml`, which is also the
+surface to use when the plugin runs headless with no browser half loaded:
 
 ```yaml
 loop-continue:
@@ -104,11 +124,8 @@ loop-continue:
     You described an action but did not call any tool. Emit the tool call now.
 ```
 
-Because the settings section is live, a save there applies to the next
-turn-stopping check with **no restart**. The plugin's settings section also
-appears on the host side of the Plugins page, but DSH renders a plugin
-configuration card only when the plugin ships a browser half; this one is
-host-only, so the YAML above is the editing surface.
+Both surfaces write the same namespace, so a value set in the card shows up in
+the file and vice versa.
 
 What each field controls:
 

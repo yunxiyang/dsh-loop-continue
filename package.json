@@ -1,6 +1,6 @@
 {
   "name": "dsh-loop-continue",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Continue a DeepSeek Harness agent turn when the model narrated but did not call a tool.",
   "type": "module",
   "main": "lib/index.js",
@@ -9,11 +9,15 @@
     ".": {
       "default": "./lib/index.js"
     },
+    "./client": {
+      "default": "./lib/client.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
     "lib/index.d.ts",
+    "lib/client.js",
     "cordis.patch.yml",
     "CHANGELOG.md",
     "README.md"
@@ -35,6 +39,9 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
     }
   }
 }

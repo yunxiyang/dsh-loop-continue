@@ -27,6 +27,8 @@ export interface Config {
   judgeMaxTokens?: number
   /** Judge sampling temperature. */
   judgeTemperature?: number
+  /** Instruction telling the judge what counts as an unfinished turn. */
+  judgePrompt?: string
   /** Message that resumes a steered turn. */
   steerText?: string
   /** Emit a diagnostic line for every hook evaluation. */
@@ -76,3 +78,9 @@ export declare function apply(ctx: unknown, config: Config): void
 
 /** Settings namespace carrying this plugin's policy; drives live reconfiguration. */
 export declare const SETTINGS_NAMESPACE: 'loop-continue'
+
+/** Built-in judge instruction, shipped as the `judgePrompt` default. */
+export declare const DEFAULT_JUDGE_PROMPT: string
+
+/** Built-in message injected when the guard steers an unfinished turn. */
+export declare const DEFAULT_STEER_TEXT: string

@@ -36,6 +36,33 @@ const DEFAULT_MAX_STEPS = 10
 /** Total characters of trailing text handed to the judge, split across the first and last halves. */
 const DEFAULT_MAX_TAIL_CHARS = 2000
 
+/**
+ * Built-in judge instruction. The judge sees a deterministic turn summary and
+ * answers one word, so this text is the entire decision policy: it ships as the
+ * `judgePrompt` default and any deployment can replace it.
+ */
+export const DEFAULT_JUDGE_PROMPT = [
+  'You inspect one coding-agent turn that just ended.',
+  'A turn ends when the agent writes text and calls no tool.',
+  'Decide whether that trailing text states an action the agent still',
+  'intends to perform, or merely reports completed work.',
+  'A promise of future action means the task is unfinished when no tool',
+  'call in the step list performed it. This includes explicit "now I will...",',
+  '"next I will..." as well as softer commitments like "let me check/confirm',
+  '/verify ... then ...", "I need to look at ...", "let me first ...", or',
+  'phrases that name a pending read, edit, run, or lookup the agent has not',
+  'yet performed.',
+  'A finished report, a question to the human, or a final answer means the',
+  'task is finished.',
+  'Reply with exactly one word: true or false.',
+].join(' ')
+
+/** Built-in message injected when the guard steers an unfinished turn. */
+export const DEFAULT_STEER_TEXT = (
+  'You described an action but did not call any tool. Continue the task now: '
+  + 'call the tool for the action you just described. Do not narrate — emit the tool call.'
+)
+
 export const Config = z.object({
   maxContinuations: z.number().step(1).min(0).default(DEFAULT_MAX_CONTINUATIONS),
   maxSteps: z.number().step(1).min(1).default(DEFAULT_MAX_STEPS),
@@ -44,11 +71,10 @@ export const Config = z.object({
   judgeModel: z.union([z.string(), z.const(null)]),
   judgeMaxTokens: z.number().step(1).min(1).default(64),
   judgeTemperature: z.number().default(0),
+  /** Instruction telling the judge what counts as an unfinished turn. */
+  judgePrompt: z.string().default(DEFAULT_JUDGE_PROMPT),
   /** Steer text sent back to the model; the model then runs one more step. */
-  steerText: z.string().default(
-    'You described an action but did not call any tool. Continue the task now: '
-    + 'call the tool for the action you just described. Do not narrate — emit the tool call.',
-  ),
+  steerText: z.string().default(DEFAULT_STEER_TEXT),
   /** Emit a diagnostic line for every hook evaluation. */
   debug: z.boolean().default(false),
 })
@@ -234,22 +260,6 @@ export function parseVerdict(text) {
  * @returns whether the turn should continue.
  */
 async function judge(ctx, route, summary, config, signal) {
-  const system = [
-    'You inspect one coding-agent turn that just ended.',
-    'A turn ends when the agent writes text and calls no tool.',
-    'Decide whether that trailing text states an action the agent still',
-    'intends to perform, or merely reports completed work.',
-    'A promise of future action means the task is unfinished when no tool',
-    'call in the step list performed it. This includes explicit "now I will...",',
-    '"next I will..." as well as softer commitments like "let me check/confirm',
-    '/verify ... then ...", "I need to look at ...", "let me first ...", or',
-    'phrases that name a pending read, edit, run, or lookup the agent has not',
-    'yet performed.',
-    'A finished report, a question to the human, or a final answer means the',
-    'task is finished.',
-    'Reply with exactly one word: true or false.',
-  ].join(' ')
-
   const messages = [{
     role: 'user',
     content: [{ type: 'text', text: renderSummary(summary, config.maxTailChars) }],
@@ -259,7 +269,7 @@ async function judge(ctx, route, summary, config, signal) {
   for await (const chunk of ctx.llm.stream({
     provider: route.provider,
     model: route.model,
-    system,
+    system: config.judgePrompt,
     messages,
     maxTokens: config.judgeMaxTokens,
     temperature: config.judgeTemperature,
@@ -402,10 +412,8 @@ function resolveConfig(config) {
     maxTailChars: config.maxTailChars ?? DEFAULT_MAX_TAIL_CHARS,
     judgeMaxTokens: config.judgeMaxTokens ?? 64,
     judgeTemperature: config.judgeTemperature ?? 0,
-    steerText: config.steerText ?? (
-      'You described an action but did not call any tool. Continue the task now: '
-      + 'call the tool for the action you just described. Do not narrate — emit the tool call.'
-    ),
+    judgePrompt: config.judgePrompt ?? DEFAULT_JUDGE_PROMPT,
+    steerText: config.steerText ?? DEFAULT_STEER_TEXT,
     debug: config.debug ?? false,
   }
 }

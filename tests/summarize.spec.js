@@ -190,7 +190,9 @@ describe('renderSummary', () => {
  * The hook fires once per completed step, and a steer keeps the turn open so
  * the next step fires it again. `events` grows the way the agent loop logs it.
  */
-function harness({ maxContinuations, verdict = 'true', finishKind = 'stop', warns = [], settings }) {
+function harness({
+  maxContinuations, verdict = 'true', finishKind = 'stop', warns = [], settings, config = {},
+}) {
   let judgeCalls = 0
   const steers = []
   const llmOptions = []
@@ -216,7 +218,9 @@ function harness({ maxContinuations, verdict = 'true', finishKind = 'stop', warn
   })
   ctx.provide('llm', llm)
   if (settings !== undefined) ctx.provide('settings', settings)
-  apply(ctx, { maxContinuations, judgeProvider: null, judgeModel: null, debug: true })
+  apply(ctx, {
+    maxContinuations, judgeProvider: null, judgeModel: null, debug: true, ...config,
+  })
 
   /** Append one step the way the loop logs it, then fire the stopping hook. */
   const stopping = async (index, blocks) => {
@@ -277,6 +281,35 @@ describe('maxContinuations budget', () => {
 })
 
 describe('judge route resolution', () => {
+  it('sends the built-in judge prompt by default', async () => {
+    const h = harness({ maxContinuations: 1 })
+    await h.stopping(1, [call('exec_command')])
+    await h.stopping(2, [text('Now I will continue.')])
+    expect(h.llmOptions[0].system).toContain('Reply with exactly one word: true or false.')
+  })
+
+  it('uses a configured judge prompt instead of the built-in one', async () => {
+    const h = harness({
+      maxContinuations: 1,
+      config: { judgePrompt: 'Answer true when the agent promised work it never did.' },
+    })
+    await h.stopping(1, [call('exec_command')])
+    await h.stopping(2, [text('Now I will continue.')])
+    expect(h.llmOptions[0].system).toBe('Answer true when the agent promised work it never did.')
+    expect(h.llmOptions[0].system).not.toContain('Reply with exactly one word')
+  })
+
+  it('uses a configured steer text instead of the built-in one', async () => {
+    const h = harness({
+      maxContinuations: 1,
+      config: { steerText: 'Keep going: emit the tool call you just described.' },
+    })
+    await h.stopping(1, [call('exec_command')])
+    await h.stopping(2, [text('Now I will continue.')])
+    expect(h.steers).toHaveLength(1)
+    expect(h.steers[0].content[0].text).toBe('Keep going: emit the tool call you just described.')
+  })
+
   it('applies a settings change without remounting the plugin', async () => {
     let hooks
     const settings = {

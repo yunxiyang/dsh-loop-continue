@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.2
+
+### Added
+
+- **`judgePrompt` config field.** The judge's instruction was hardcoded; it now
+  ships as a default and can be replaced per deployment, so the decision policy
+  is tunable without a code change. `DEFAULT_JUDGE_PROMPT` and
+  `DEFAULT_STEER_TEXT` are exported for reference.
+- **Prompt editing documented.** Both prompt texts live in
+  `~/.dsh/settings.yaml` under `loop-continue:` and, because the guard resolves
+  config per evaluation, a save applies to the next turn-stopping check with no
+  restart.
+
+### Fixed
+
+- README described `judgeProvider`/`judgeModel` as deriving from the global
+  default-model setting. The guard follows the current conversation's own
+  provider/model instead.
+
 ## 0.1.1
 
 ### Fixed

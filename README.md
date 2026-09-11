@@ -50,7 +50,8 @@ Source edits under `lib/` are picked up only on restart.
 | `judgeModel`     | null    | override model; null/unset = derive from the active default model    |
 | `judgeMaxTokens` | 64      | judge output cap                               |
 | `judgeTemperature` | 0     | judge sampling temperature                     |
-| `steerText`      | built-in | message that resumes the turn                |
+| `judgePrompt`    | built-in | instruction telling the judge what counts as unfinished |
+| `steerText`      | built-in | message injected when the guard steers        |
 | `debug`          | false   | log every evaluation                          |
 
 ## Deterministic gates
@@ -80,13 +81,45 @@ The guard resolves its config on every evaluation rather than freezing it at
 mount, so a change reaches the very next turn-stopping check. Two ways to set
 values:
 
-- the harness **Settings UI** (the plugin installs a `loop-continue` section), or
+- the user settings file, `~/.dsh/settings.yaml`, under a `loop-continue:` key, or
 - the profile's own `cordis.patch.yml`.
 
-Prefer leaving `judgeProvider`/`judgeModel` unset. The guard then derives a
-registered route from the active default model, which always resolves; a
-hand-written route can name a provider the LLM service does not have registered,
-and the judge call then fails.
+Prefer leaving `judgeProvider`/`judgeModel` unset. The guard then judges with
+the model the current conversation is already running, which is by definition a
+working route; set them only to judge with a different model on purpose.
+
+## Editing the prompts
+
+Both prompt texts ship as defaults and are plain config fields, so you can
+retune the guard without touching code. The editing surface is
+`~/.dsh/settings.yaml`:
+
+```yaml
+loop-continue:
+  judgePrompt: >-
+    You inspect one coding-agent turn that just ended. Reply with exactly one
+    word: true if the trailing text promises work that no tool call performed,
+    false otherwise.
+  steerText: >-
+    You described an action but did not call any tool. Emit the tool call now.
+```
+
+Because the settings section is live, a save there applies to the next
+turn-stopping check with **no restart**. The plugin's settings section also
+appears on the host side of the Plugins page, but DSH renders a plugin
+configuration card only when the plugin ships a browser half; this one is
+host-only, so the YAML above is the editing surface.
+
+What each field controls:
+
+- **`judgePrompt`** — the judge's whole decision policy. The judge sees a
+  deterministic summary (tool calls per step, trailing text, the human request)
+  and must answer one word. Tighten it if the guard steers turns that were
+  actually finished; loosen it if it misses dropped actions.
+- **`steerText`** — what the model is told when a turn is steered. This is the
+  message the model acts on, so phrase it as an instruction to emit the call.
+
+To revert, delete the fields; the built-ins come back.
 
 ## Hot mount
 

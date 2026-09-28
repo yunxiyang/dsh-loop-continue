@@ -4,6 +4,19 @@
 
 ### Added
 
+- The judge call's self-contained shape is now stated, tested, and documented.
+  It always was self-contained — `system` is `judgePrompt`, `messages` is one
+  `renderSummary(...)` user message, no `tools`, no replayed history — but
+  nothing said so, and reusing the session context is an attractive-looking
+  change now that prefix caching is visible. It is not one: the host's
+  incremental `Session.deriveMessages` does make such a prefix hit, yet the
+  saving is the miss on roughly 1–2k tokens while the verdict is the plugin's
+  whole output, and the call would lose determinism, focus, and a cost that
+  tracks the turn rather than the session. A comment on `judge()`, the test
+  `sends the judge a self-contained request`, and a README section now hold
+  that line; both mutations that would cross it (adding `tools`, replaying
+  history) fail the test.
+
 - `npm run build` copies `src/` to `lib/`, and `npm run check` fails when the
   two differ. The tests exercise `src/` while npm publishes `lib/`, and nothing
   derived one from the other at install time, so a forgotten copy would have
@@ -19,6 +32,19 @@
   reachable as ranges no registry resolution can satisfy: node-semver admits a
   prerelease only inside its own `major.minor.patch` tuple, so `^0.1.1-rc.2`
   excludes `0.1.5-rc.2`.
+
+### Changed
+
+- `maxSteps` defaults to `6` (was 10) and `maxTailChars` to `1500` (was 2000).
+  The verdict turns on the last text-only step and on whether an earlier step
+  already performed the action that step names, so a few steps is the useful
+  window; the rest lengthen the prompt without informing the answer, and a
+  promise usually sits in the opening clause and is restated at the end, which
+  is what the two-ended truncation reads.
+
+  Two tests pin the defaults on the two paths that consume them — the schema's
+  `.default()` and `resolveConfig`'s `??` fallback. Neither covers the other,
+  and changing the constants back fails both.
 
 ## 0.2.0
 

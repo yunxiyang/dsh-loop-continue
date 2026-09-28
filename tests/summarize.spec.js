@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import {
-  apply, looksUnfinished, parseVerdict, renderSummary, summarizeTurn,
+  apply, Config, DEFAULT_MAX_STEPS, DEFAULT_MAX_TAIL_CHARS,
+  looksUnfinished, parseVerdict, renderSummary, summarizeTurn,
 } from '../src/index.js'
 
 /** Build one step's events the way the agent loop really logs them. */
@@ -310,6 +311,27 @@ describe('judge route resolution', () => {
     expect(h.steers[0].content[0].text).toBe('Keep going: emit the tool call you just described.')
   })
 
+  it('sends the judge a self-contained request', async () => {
+    // The judge decides one narrow question and nothing else. Sending it the
+    // conversation, or the tool definitions, would make a verdict depend on how
+    // long the session had run: the same turn shape would answer differently at
+    // step 3 and step 300. Reusing the session context is cheaper per token on
+    // a cache hit, but the saving is ~1-2k of miss and the verdict is the whole
+    // product. This test is what keeps that trade from being undone.
+    const h = harness({ maxContinuations: 1 })
+    await h.stopping(1, [call('exec_command')])
+    await h.stopping(2, [text('Now I will continue.')])
+
+    const sent = h.llmOptions[0]
+    expect(sent.tools).toBeUndefined()
+    expect(sent.messages).toHaveLength(1)
+    expect(sent.messages[0].role).toBe('user')
+    expect(sent.messages[0].content).toHaveLength(1)
+    expect(sent.messages[0].content[0].type).toBe('text')
+    // The one message is the rendered summary, not replayed history.
+    expect(sent.messages[0].content[0].text).toContain('Now I will continue.')
+  })
+
   it('applies a settings change without remounting the plugin', async () => {
     let hooks
     const settings = {
@@ -365,5 +387,39 @@ describe('judge route resolution', () => {
     await h.stopping(2, [text('Now I will continue.')])
     expect(h.steers).toHaveLength(0)
     expect(h.warns.some(w => w.includes('judge call failed'))).toBe(true)
+  })
+})
+
+describe('default input budget', () => {
+  it('declares the shipped defaults on the schema', () => {
+    // The schema is what a Settings write is validated against, so its defaults
+    // are the values a fresh install resolves to when nothing is stored.
+    const resolved = Config({})
+    expect(resolved.maxSteps).toBe(DEFAULT_MAX_STEPS)
+    expect(resolved.maxTailChars).toBe(DEFAULT_MAX_TAIL_CHARS)
+  })
+
+  it('falls back to those defaults when the policy omits them', async () => {
+    // harness applies `{ maxContinuations, judgeProvider, judgeModel, debug,
+    // ...config }`, which carries neither budget field. So an absent `config`
+    // necessarily resolves through resolveConfig's `??` fallback — the path
+    // that the schema assertion above does not reach.
+    const half = Math.floor(DEFAULT_MAX_TAIL_CHARS / 2)
+    const head = 'H'.repeat(half + 50)
+    const middle = 'M'.repeat(400)
+    const tail = 'T'.repeat(Math.ceil(DEFAULT_MAX_TAIL_CHARS / 2) + 50)
+
+    const h = harness({ maxContinuations: 1 })
+    await h.stopping(1, [call('exec_command')])
+    await h.stopping(2, [text(`${head}${middle}${tail}`)])
+
+    const sent = h.llmOptions[0].messages[0].content[0].text
+    expect(sent).toContain('...\n[truncated middle]\n...\n')
+    // The boundary is what pins the default: a 1500 budget keeps 750 from each
+    // end, where the old 2000 kept 1000. Asserting only that the marker exists
+    // would pass under either.
+    expect(sent).toContain(head.slice(0, half))
+    expect(sent).toContain(tail.slice(-Math.ceil(DEFAULT_MAX_TAIL_CHARS / 2)))
+    expect(sent).not.toContain(middle)
   })
 })

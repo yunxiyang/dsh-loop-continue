@@ -44,8 +44,8 @@ Source edits under `lib/` are picked up only on restart.
 | field            | default | in card | meaning                                        |
 |------------------|---------|---------|------------------------------------------------|
 | `maxContinuations` | 10    | yes     | hard cap on steering per turn (no infinite loop) |
-| `maxSteps`       | 10      | yes     | newest steps shown to the judge                |
-| `maxTailChars`   | 2000    | yes     | trailing-text budget split across the first and last halves |
+| `maxSteps`       | 6       | yes     | newest steps shown to the judge                |
+| `maxTailChars`   | 1500    | yes     | trailing-text budget split across the first and last halves |
 | `judgePrompt`    | built-in | yes    | instruction telling the judge what counts as unfinished |
 | `steerText`      | built-in | yes    | message injected when the guard steers        |
 | `debug`          | false   | yes     | log every evaluation (needs a restart)         |
@@ -63,6 +63,34 @@ No model call runs unless the turn *both*:
 
 This keeps the extra judge call off ordinary finished turns and only spends it
 where the model plausibly dropped a pending action.
+
+## The judge call is self-contained
+
+What goes out for that one call is deliberately small and built from scratch:
+`system` is `judgePrompt`, and `messages` is a single user message holding
+`renderSummary(...)` — the trailing text plus the last `maxSteps` steps. No
+`tools` are sent, and no session history is replayed. The test
+`sends the judge a self-contained request` pins that shape.
+
+**Reusing the session would be cheaper per token, and that is not the
+question.** The host derives messages incrementally and reuses the frozen
+message objects (`Session.deriveMessages`), so appending one user turn leaves
+the whole prefix byte-identical and the provider's prefix cache does hit. That
+part works. But the saving is the *miss* on roughly 1–2k tokens, and the
+verdict is this plugin's entire output. Three properties are worth more than
+that:
+
+- **Determinism.** `temperature: 0` over a fixed summary answers the same way
+  for the same turn shape. A judge reading the whole conversation drifts with
+  it.
+- **Focus.** The question is narrow — does the trailing text promise an action
+  that no tool call performed. Trailing text plus the last few steps is the
+  signal; dozens of earlier turns dilute it.
+- **Cost that tracks the turn, not the session.** The call is O(1–2k tokens)
+  whether the conversation is 3 steps or 300.
+
+If the goal is fewer tokens, shrink the input instead: lower `maxTailChars` or
+`maxSteps`. That cuts the call without giving up any of the three.
 
 ## Stopping early
 

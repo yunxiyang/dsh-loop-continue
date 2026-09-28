@@ -30,11 +30,20 @@ const PLUGIN_SOURCE = { kind: 'plugin', plugin: name }
 /** How many extra steps one turn may buy, across all of its stopping boundaries. */
 export const DEFAULT_MAX_CONTINUATIONS = 10
 
-/** How many most-recent steps of the current turn the summary shows. */
-export const DEFAULT_MAX_STEPS = 10
+/**
+ * How many most-recent steps of the current turn the summary shows. The
+ * verdict turns on the last text-only step and whether an earlier step already
+ * performed the action it names, so a handful of steps is the useful window;
+ * older ones only lengthen the prompt.
+ */
+export const DEFAULT_MAX_STEPS = 6
 
-/** Total characters of trailing text handed to the judge, split across the first and last halves. */
-export const DEFAULT_MAX_TAIL_CHARS = 2000
+/**
+ * Total characters of trailing text handed to the judge, split across the
+ * first and last halves. The promise lives in the opening clause and is often
+ * restated at the end; the middle is prose.
+ */
+export const DEFAULT_MAX_TAIL_CHARS = 1500
 
 /** Judge output ceiling; the answer is one word. */
 export const DEFAULT_JUDGE_MAX_TOKENS = 64
@@ -258,6 +267,28 @@ export function parseVerdict(text) {
  * Ask the judge model whether the trailing text promises work that no tool
  * call performed.
  *
+ * The request is deliberately SELF-CONTAINED: a fresh `system` (the judge
+ * policy), one user message holding a deterministic summary, no `tools`, and no
+ * session history. Three properties depend on that and would be lost by reusing
+ * the conversation instead:
+ *
+ * - Determinism. `temperature: 0` plus a fixed summary means the same turn
+ *   shape yields the same verdict. A judge that reads the whole conversation
+ *   answers differently as that conversation drifts.
+ * - Focus. The question is narrow — did the trailing text promise an action
+ *   that no tool call performed — so the judge only sees the trailing text and
+ *   the recent steps. Handing it dozens of earlier turns dilutes the signal it
+ *   is asked to read.
+ * - Cost proportional to the turn, not to the session. The call is O(1-2k
+ *   tokens) regardless of how long the conversation has run.
+ *
+ * Reusing the session context would be cheaper per token on a cache hit — the
+ * host derives messages incrementally and shares already-frozen message objects
+ * (`Session.deriveMessages`), so appending one user message leaves the whole
+ * prefix byte-identical and the cache does hit. That is a real saving, and it is
+ * still the wrong trade: the miss saved is ~1-2k tokens while the verdict is
+ * this plugin's entire output. Keep the call self-contained.
+ *
  * @param ctx - plugin context exposing `ctx.llm`.
  * @param route - provider/model to call.
  * @param summary - deterministic turn facts.
@@ -272,6 +303,8 @@ async function judge(ctx, route, summary, config, signal) {
   }]
 
   const assembler = new BlockAssembler()
+  // No `tools` field: the judge answers one word and must not be able to call
+  // anything. No history: see the note above.
   for await (const chunk of ctx.llm.stream({
     provider: route.provider,
     model: route.model,

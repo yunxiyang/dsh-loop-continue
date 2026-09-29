@@ -93,6 +93,16 @@ export const Config = z.object({
   /** Emit a diagnostic line for every hook evaluation. */
   debug: z.boolean().default(false),
 })
+  // dsh 0.1.7 writes a plugin's configuration through `volatileForm()`, which
+  // returns nothing unless some field -- or an object above one -- carries
+  // `meta.volatile`. Without this every edit is rejected on the way in: the
+  // Host throws `Config field "..." is not volatile`, the transport turns that
+  // into `{ ok: false }`, and the card can only report that the write was not
+  // accepted. One root flag covers every field, so the explicit form is used
+  // rather than the `.volatile()` builder -- the two are equivalent, since
+  // `.volatile()` returns `this.extra('volatile', true)` behind a double-wrap
+  // guard, and only `meta.volatile` is what the Host reads.
+  .extra('volatile', true)
 
 /**
  * Read a session's immutable event log across host core versions.

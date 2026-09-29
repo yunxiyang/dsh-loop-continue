@@ -45,6 +45,25 @@
   `mutate([{ op: 'unset', path: [field] }])` — the shape the controller's own
   `unset` uses.
 
+- **The settings card's edits are accepted on dsh 0.2.0-rc.1.** Its `Config`
+  schema carried no `meta.volatile`, so the host refused every write with
+  `Plugin entry "loop-continue" has no volatile fields` (or
+  `Config field "<field>" is not volatile`) and the card could only report that
+  the value had not been accepted. The schema is now marked volatile at the
+  root with `.extra('volatile', true)`, which is what the host actually reads —
+  `Schema.prototype.volatile()` is that same call behind a double-wrap guard,
+  and the profile's pinned schemastery predates neither behavior, so the
+  explicit form keeps the intent visible. One root flag covers every field,
+  including the `maxContinuations`/`maxSteps` a profile patch injects.
+
+- The host-provided peers now admit the 0.2 line. `^0.1.1-rc.2` excluded
+  `0.2.0-rc.1` for the same node-semver reason the pinned dev dependencies
+  record: a prerelease is admitted only inside its own `major.minor.patch`
+  tuple, so the range that shipped with 0.2.0 rejected the host it was written
+  for and pnpm reported unmet peers at install time. All three are now
+  `^0.1.1-rc.2 || ^0.2.0-rc.1`, which accepts the 0.2.0-rc.1 host and still
+  refuses `0.3.0-rc.1`, so one published version serves both lines.
+
 - The dev dependencies are pinned exactly. The host-provided peers were only
   reachable as ranges no registry resolution can satisfy: node-semver admits a
   prerelease only inside its own `major.minor.patch` tuple, so `^0.1.1-rc.2`

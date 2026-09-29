@@ -28,12 +28,36 @@
 
 ### Fixed
 
+- **The settings card works on dsh 0.1.7 and its edits are saved.** 0.1.7
+  removed the `settingsScope` service and the `settings.plugin.item` slot it
+  hung off; a configuration is now addressed by Loader ENTRY ID through the
+  `configForms` service, and a third-party bundle seats its card in
+  `plugins.row.config` under `<package name>#<row id>`. Both are now checked
+  for at runtime rather than declared, so the plugin mounts on either line.
+
+  The write path was the subtler half. The host does not pass the
+  `configForms` controller into `plugins.row.config` — it passes its own
+  adapter, which carries the controller's snapshot as `state` plus a `mutate`
+  and has no `getSnapshot`, `subscribe` or `set`. Wrapping that adapter is
+  what lets a card read and write at all, and `settingsScopeOf` now wraps it
+  when only an adapter is offered, while handing a real controller straight
+  through. The adapter has no `unset`, so the wrap supplies one as
+  `mutate([{ op: 'unset', path: [field] }])` — the shape the controller's own
+  `unset` uses.
+
 - The dev dependencies are pinned exactly. The host-provided peers were only
   reachable as ranges no registry resolution can satisfy: node-semver admits a
   prerelease only inside its own `major.minor.patch` tuple, so `^0.1.1-rc.2`
   excludes `0.1.5-rc.2`.
 
 ### Changed
+
+- A rejected write is now visible. The controller's `mutate` returns `false`
+  when the host refuses an edit instead of throwing, so with every call site
+  written as `void scope.set(...)` a refusal looked exactly like a stale
+  render: the card kept showing the old value and nothing was reported. Each
+  write now reports its outcome and the card prints a line when one is not
+  accepted.
 
 - `maxSteps` defaults to `6` (was 10) and `maxTailChars` to `1500` (was 2000).
   The verdict turns on the last text-only step and on whether an earlier step

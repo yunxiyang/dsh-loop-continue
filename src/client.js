@@ -304,6 +304,48 @@ window.__ModuleLoader__.load({
 `
 
     /**
+     * The scope the card renders, from whichever shape the host handed over.
+     *
+     * The host does not pass a `configForms` controller into
+     * `plugins.row.config`. It passes its own adapter -- the controller's
+     * snapshot as `state`, plus a `mutate` that writes through it -- and that
+     * object has no `getSnapshot`, no `subscribe` and no `set`. Taking it for a
+     * scope is what showed an empty card: the header read the fallback state
+     * and the body announced the settings were read-only, because `snapshot`
+     * fell back to `{}` and `writable` to false.
+     *
+     * A real controller therefore wins wherever one is offered -- the host's
+     * `form` prop when it is one, otherwise the controller this plugin already
+     * resolved for the same namespace, which is the same instance the adapter
+     * wraps. The adapter is wrapped only as a fallback, and wrapping loses the
+     * subscription: it carries a snapshot taken at render time, not the store
+     * behind it, so a write made through it lands but only the host can decide
+     * to render the result.
+     * @param candidates - the host's `form` prop and the resolved controller.
+     * @returns a scope, or undefined when neither shape is usable.
+     */
+    function settingsScopeOf(candidates) {
+      for (const candidate of candidates) {
+        if (candidate === null || candidate === undefined) continue
+        // A real controller (`configForms.get(ns)`) already exposes the whole
+        // surface the card writes through -- `set(field, value)` and
+        // `unset(field)` are base-class methods that wrap `mutate`, so it is
+        // handed over untouched rather than wrapped.
+        if (typeof candidate.set === 'function' && typeof candidate.getSnapshot === 'function') return candidate
+      }
+      for (const candidate of candidates) {
+        if (candidate === null || candidate === undefined || typeof candidate.mutate !== 'function') continue
+        return {
+          getSnapshot: () => candidate.state ?? {},
+          subscribe: () => undefined,
+          set: (field, value) => candidate.mutate([{ op: 'set', path: [field], value }]),
+          unset: field => candidate.mutate([{ op: 'unset', path: [field] }]),
+        }
+      }
+      return undefined
+    }
+
+    /**
      * Install the card stylesheet once. The loader re-executes this factory on
      * every HMR rebuild, so a second tag would stack a duplicate sheet.
      * @returns the disposer removing the tag.
@@ -417,12 +459,28 @@ window.__ModuleLoader__.load({
       // is not rewritten per keystroke. `null` means "showing the stored value".
       const [drafts, setDrafts] = useState({})
       const scratch = useRef({})
+      // The Host answers a write with a boolean, not an exception: a rejected
+      // write (stale revision, read-only document) returns false and leaves the
+      // card showing the old value. Surfacing that is the difference between
+      // "the write was refused" and "the write landed but the card did not
+      // re-read", which are otherwise indistinguishable from the outside.
+      const [saveError, setSaveError] = useState(null)
+
+      const write = (operation, field) => {
+        const result = operation()
+        if (result === undefined || typeof result.then !== 'function') return
+        result.then(accepted => {
+          setSaveError(accepted === false ? `${field} 未被接受` : null)
+        }).catch(error => {
+          setSaveError(`${field}: ${String(error?.message ?? error)}`)
+        })
+      }
 
       const commitText = (field) => {
         const next = scratch.current[field]
         setDrafts(prev => { const rest = { ...prev }; delete rest[field]; return rest })
         if (next === undefined || next === value[field]) return
-        void scope.set(field, next)
+        write(() => scope.set(field, next), field)
       }
 
       // Clearing the scratch value is what makes the blur a button click
@@ -464,7 +522,10 @@ window.__ModuleLoader__.load({
               className: 'dshLoopButton',
               type: 'button',
               disabled: !writable,
-              onClick: () => { void scope.unset(spec.field); revertText(spec.field) },
+              onClick: () => {
+                write(() => scope.unset(spec.field), spec.field)
+                revertText(spec.field)
+              },
             }, '恢复内置默认'),
             dirty
               ? createElement('button', {
@@ -483,7 +544,7 @@ window.__ModuleLoader__.load({
           spec,
           stored: value[spec.field],
           writable,
-          onCommit: (next) => { void scope.set(spec.field, next) },
+          onCommit: (next) => { write(() => scope.set(spec.field, next), spec.field) },
         }))
       }
 
@@ -494,7 +555,7 @@ window.__ModuleLoader__.load({
             type: 'checkbox',
             checked: debugOn,
             disabled: !writable,
-            onChange: (event) => { void scope.set(F_DEBUG, event.target.checked) },
+            onChange: (event) => { write(() => scope.set(F_DEBUG, event.target.checked), F_DEBUG) },
           }),
           createElement('span', null, 'debug — 把每次判定写进日志'),
         ),
@@ -534,6 +595,13 @@ window.__ModuleLoader__.load({
               : createElement('p', { className: 'dshLoopReadOnly', role: 'status' },
                 '当前设置不可写,以下控件为只读。'),
             ...rows,
+            // A rejected write returns `false` instead of throwing, so without
+            // this the card would simply keep showing the old value and the
+            // failure would be indistinguishable from a stale render.
+            saveError === null
+              ? null
+              : createElement('p', { className: 'dshLoopError', role: 'status' },
+                `写入未生效:${saveError}`),
           )
           : null,
       )
@@ -546,9 +614,36 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       ctx.effect(() => installStyles(), `${PLUGIN_ID}: card styles`)
 
-      // The configurable tab dispatches a card only while the Host serves its
-      // namespace, so the binding and the slot registration ride one scope.
+      // dsh 0.1.7 line: `settingsScope` and the `settings.plugin.item` slot that
+      // hung off it are gone. A plugin's configuration is addressed by its
+      // Loader ENTRY ID through `configForms`, and a third-party bundle seats
+      // its card in `plugins.row.config` under `<package name>#<row id>`. The
+      // `Config` schema the Node half exports is the whole registration.
+      //
+      // Both the service and the slot are probed rather than declared, and
+      // `ctx.get` is itself reached through optional chaining: a host that has
+      // neither must lose the card, not the plugin.
+      const configForms = ctx.get?.('configForms')
+      if (configForms !== undefined && typeof configForms.get === 'function') {
+        const form = configForms.get(NAMESPACE)
+        ctx.inject(['slots'], (scoped) => {
+          if (scoped.slots === undefined) return
+          scoped.slots.inject('plugins.row.config', () => scoped.slots.register({
+            name: 'plugins.row.config',
+            key: `${PLUGIN_ID}#${NAMESPACE}`,
+          }, ({ view, form: pageForm } = {}) => (view === 'summary'
+            ? null
+            : createElement(LoopContinueCard, { scope: settingsScopeOf([pageForm, form]) }))))
+        })
+        return
+      }
+
+      // Older line: the configurable tab dispatches a card only while the Host
+      // serves its namespace, so the binding and the slot registration ride one
+      // scope.
       ctx.inject(['slots', 'settingsScope'], (scoped) => {
+        if (scoped.slots === undefined) return
+        if (typeof scoped.settingsScope?.bind !== 'function') return
         const scope = scoped.settingsScope.bind({ namespace: NAMESPACE })
         scoped.slots.inject('settings.plugin.item', () => scoped.slots.register({
           name: 'settings.plugin.item',
@@ -557,6 +652,9 @@ window.__ModuleLoader__.load({
       })
     }
 
-    return { apply, name: PLUGIN_ID, inject: ['slots', 'settingsScope'] }
+    // `settingsScope` is deliberately NOT named here: a plugin that declares a
+    // service its host does not provide never mounts, and on 0.1.7 that is
+    // exactly the case. The service is resolved conditionally inside `apply`.
+    return { apply, name: PLUGIN_ID, inject: ['slots'] }
   },
 })

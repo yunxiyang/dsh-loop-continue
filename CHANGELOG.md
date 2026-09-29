@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.3
+
+### Fixed
+
+- **The steering message carries a producer-owned source kind again.** Session
+  format v4 refuses `{ kind: 'plugin', plugin: name }` on persist — the host's
+  own admission rule, enforced over every declared message slot — so each
+  steering message was rejected and, because the record is appended from a
+  step hook, the refusal failed the whole turn with
+  `format v4 message requires a producer-owned source kind`. The message now
+  claims the source kind `plugin:loop-continue`, which is the kind the v3 to v4
+  migration derives for this plugin, so records written before the upgrade
+  still answer to the same name.
+
 ## 0.2.2
 
 ### Added

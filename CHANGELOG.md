@@ -14,6 +14,17 @@
   migration derives for this plugin, so records written before the upgrade
   still answer to the same name.
 
+- **The client bundle no longer demands one that does not exist.** `dsh.client.inject`
+  listed `@deepseek-ai/dsh-settings` alongside the sidebar package, but that
+  package is host-side only: it exports `"."` and `"./types"`, ships no
+  `lib/client.js`, and declares no `dsh` field. The loader is asked to mount a
+  client bundle for every id it is given, so the missing one failed web boot at
+  `phase: running` with an import error — while a cold start stayed clean, which
+  is why only an in-page reload hit it. The entry is gone; the sidebar package
+  stays, since its `"./client"` export and `dsh` field are both real. The
+  `peerDependencies` and `devDependencies` entries for `dsh-settings` stay too,
+  because the host-side code still uses the service.
+
 ## 0.2.2
 
 ### Added
